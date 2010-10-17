@@ -333,8 +333,19 @@ plugin_config_frame(PurplePlugin *plugin)
 static void
 init_plugin(PurplePlugin *plugin)
 {
+	const gchar * const * languages;
+	languages = g_get_language_names();
+	const gchar *language;
+	guint i = 0;
+	
+	while((language = languages[i++]))
+		if (language && strlen(language) == 2)
+			break;
+	if (!language || strlen(language) != 2)
+		language = "en";
+	
 	purple_prefs_add_none("/plugins/core/eionrobb-libpurple-translate");
-	purple_prefs_add_string("/plugins/core/eionrobb-libpurple-translate/locale", "en");
+	purple_prefs_add_string("/plugins/core/eionrobb-libpurple-translate/locale", language);
 	purple_prefs_add_string("/plugins/core/eionrobb-libpurple-translate/service", "google");
 }
 
