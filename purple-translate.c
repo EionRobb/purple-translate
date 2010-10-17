@@ -136,7 +136,7 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
                              PurpleMessageFlags *flags)
 {
 	struct TranslateConvMessage *convmsg;
-	const gchar *stored_lang = "";
+	const gchar *stored_lang = "auto";
 	gchar *stripped;
 	const gchar *to_lang;
 	PurpleBuddy *buddy;
@@ -146,6 +146,8 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
 	service_to_use = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/service");
 	if (buddy)
 		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)buddy, "eionrobb-translate-lang");
+	if (!stored_lang)
+		stored_lang = "auto";
 	if (!buddy || !service_to_use || g_str_equal(stored_lang, "none"))
 	{
 		//Allow the message to go through as per normal
@@ -217,7 +219,7 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 	if (buddy)
 		to_lang = purple_blist_node_get_string((PurpleBlistNode *)buddy, "eionrobb-translate-lang");
 	
-	if (!buddy || !service_to_use || g_str_equal(from_lang, to_lang) || !to_lang || g_str_equal(to_lang, "auto"))
+	if (!buddy || !service_to_use || !to_lang || g_str_equal(from_lang, to_lang) || g_str_equal(to_lang, "auto"))
 	{
 		// Don't translate this message
 		return;
