@@ -29,6 +29,8 @@
 #include "plugin.h"
 #include "debug.h"
 
+/** This is the list of languages we support, populated in plugin_init */
+static GList *supported_languages = NULL;
 
 typedef void(* TranslateCallback)(const gchar *original_phrase, const gchar *translated_phrase, const gchar *detected_language, gpointer userdata);
 struct _TranslateStore {
@@ -244,11 +246,90 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 	*message = NULL;
 }
 
+static void
+translate_action_blist_cb(PurpleBlistNode *node, PurpleKeyValuePair *pair)
+{
+	if (pair == NULL)
+		purple_blist_node_set_string(node, "eionrobb-translate-lang", NULL);
+	else
+		purple_blist_node_set_string(node, "eionrobb-translate-lang", pair->key);
+}
+
+static void
+translate_extended_menu(PurpleBlistNode *node, GList **menu, PurpleCallback callback)
+{
+	const gchar *stored_lang;
+	GList *menu_children = NULL;
+	PurpleMenuAction *action;
+	PurpleKeyValuePair *pair;
+	GList *l;
+	
+	if (!node)
+		return;
+	
+	stored_lang = purple_blist_node_get_string(node, "eionrobb-translate-lang");
+	if (!stored_lang)
+		stored_lang = "auto";
+
+	action = purple_menu_action_new("Auto", callback, NULL, NULL);
+	menu_children = g_list_append(menu_children, action);
+	
+	// Spacer
+	menu_children = g_list_append(menu_children, NULL);
+	
+	for(l = supported_languages; l; l = l->next)
+	{
+		pair = (PurpleKeyValuePair *) l->data;
+		action = purple_menu_action_new(pair->value, callback, pair, NULL);
+		menu_children = g_list_append(menu_children, action);
+	}
+	
+	// Create the menu for the languages
+	action = purple_menu_action_new("Translate to...", NULL, NULL, menu_children);
+	*menu = g_list_append(*menu, action);
+}
+
+static void
+translate_blist_extended_menu(PurpleBlistNode *node, GList **menu)
+{
+	translate_extended_menu(node, menu, (PurpleCallback)translate_action_blist_cb);
+}
+
+static void
+translate_action_conv_cb(PurpleConversation *conv, PurpleKeyValuePair *pair)
+{
+	PurpleBlistNode *node = NULL;
+	
+	if (conv->type == PURPLE_CONV_TYPE_IM)
+		node = (PurpleBlistNode *) purple_find_buddy(conv->account, conv->name);
+	else if (conv->type == PURPLE_CONV_TYPE_CHAT)
+		node = (PurpleBlistNode *) purple_blist_find_chat(conv->account, conv->name);
+	
+	if (node != NULL)
+		translate_action_blist_cb(node, pair);
+}
+
+static void
+translate_conv_extended_menu(PurpleConversation *conv, GList **menu)
+{
+	PurpleBlistNode *node = NULL;
+	
+	if (conv->type == PURPLE_CONV_TYPE_IM)
+		node = (PurpleBlistNode *) purple_find_buddy(conv->account, conv->name);
+	else if (conv->type == PURPLE_CONV_TYPE_CHAT)
+		node = (PurpleBlistNode *) purple_blist_find_chat(conv->account, conv->name);
+	
+	if (node != NULL)
+		translate_extended_menu(node, menu, (PurpleCallback)translate_action_conv_cb);
+}
+
 static PurplePluginPrefFrame *
 plugin_config_frame(PurplePlugin *plugin)
 {
 	PurplePluginPrefFrame *frame;
 	PurplePluginPref *ppref;
+	GList *l = NULL;
+	PurpleKeyValuePair *pair;
 	
 	frame = purple_plugin_pref_frame_new();
 	
@@ -257,65 +338,11 @@ plugin_config_frame(PurplePlugin *plugin)
 		"My language:");
 	purple_plugin_pref_set_type(ppref, PURPLE_PLUGIN_PREF_CHOICE);
 	
-	purple_plugin_pref_add_choice(ppref, "Afrikaans", "af");
-	purple_plugin_pref_add_choice(ppref, "Albanian", "sq");
-	purple_plugin_pref_add_choice(ppref, "Arabic", "ar");
-	purple_plugin_pref_add_choice(ppref, "Armenian", "hy");
-	purple_plugin_pref_add_choice(ppref, "Azerbaijani", "az");
-	purple_plugin_pref_add_choice(ppref, "Basque", "eu");
-	purple_plugin_pref_add_choice(ppref, "Belarusian", "be");
-	purple_plugin_pref_add_choice(ppref, "Bulgarian", "bg");
-	purple_plugin_pref_add_choice(ppref, "Catalan", "ca");
-	purple_plugin_pref_add_choice(ppref, "Chinese (Simplified)", "zh-CN");
-	purple_plugin_pref_add_choice(ppref, "Chinese (Traditional)", "zh-TW");
-	purple_plugin_pref_add_choice(ppref, "Croatian", "hr");
-	purple_plugin_pref_add_choice(ppref, "Czech", "cs");
-	purple_plugin_pref_add_choice(ppref, "Danish", "da");
-	purple_plugin_pref_add_choice(ppref, "Dutch", "nl");
-	purple_plugin_pref_add_choice(ppref, "English", "en");
-	purple_plugin_pref_add_choice(ppref, "Estonian", "et");
-	purple_plugin_pref_add_choice(ppref, "Filipino", "tl");
-	purple_plugin_pref_add_choice(ppref, "Finnish", "fi");
-	purple_plugin_pref_add_choice(ppref, "French", "fr");
-	purple_plugin_pref_add_choice(ppref, "Galician", "gl");
-	purple_plugin_pref_add_choice(ppref, "Georgian", "ka");
-	purple_plugin_pref_add_choice(ppref, "German", "de");
-	purple_plugin_pref_add_choice(ppref, "Greek", "el");
-	purple_plugin_pref_add_choice(ppref, "Haitian Creole", "ht");
-	purple_plugin_pref_add_choice(ppref, "Hebrew", "iw");
-	purple_plugin_pref_add_choice(ppref, "Hindi", "hi");
-	purple_plugin_pref_add_choice(ppref, "Hungarian", "hu");
-	purple_plugin_pref_add_choice(ppref, "Icelandic", "is");
-	purple_plugin_pref_add_choice(ppref, "Indonesian", "id");
-	purple_plugin_pref_add_choice(ppref, "Irish", "ga");
-	purple_plugin_pref_add_choice(ppref, "Italian", "it");
-	purple_plugin_pref_add_choice(ppref, "Japanese", "ja");
-	purple_plugin_pref_add_choice(ppref, "Korean", "ko");
-	purple_plugin_pref_add_choice(ppref, "Latin", "la");
-	purple_plugin_pref_add_choice(ppref, "Latvian", "lv");
-	purple_plugin_pref_add_choice(ppref, "Lithuanian", "lt");
-	purple_plugin_pref_add_choice(ppref, "Macedonian", "mk");
-	purple_plugin_pref_add_choice(ppref, "Malay", "ms");
-	purple_plugin_pref_add_choice(ppref, "Maltese", "mt");
-	purple_plugin_pref_add_choice(ppref, "Norwegian", "no");
-	purple_plugin_pref_add_choice(ppref, "Persian", "fa");
-	purple_plugin_pref_add_choice(ppref, "Polish", "pl");
-	purple_plugin_pref_add_choice(ppref, "Portuguese", "pt");
-	purple_plugin_pref_add_choice(ppref, "Romanian", "ro");
-	purple_plugin_pref_add_choice(ppref, "Russian", "ru");
-	purple_plugin_pref_add_choice(ppref, "Serbian", "sr");
-	purple_plugin_pref_add_choice(ppref, "Slovak", "sk");
-	purple_plugin_pref_add_choice(ppref, "Slovenian", "sl");
-	purple_plugin_pref_add_choice(ppref, "Spanish", "es");
-	purple_plugin_pref_add_choice(ppref, "Swahili", "sw");
-	purple_plugin_pref_add_choice(ppref, "Swedish", "sv");
-	purple_plugin_pref_add_choice(ppref, "Thai", "th");
-	purple_plugin_pref_add_choice(ppref, "Turkish", "tr");
-	purple_plugin_pref_add_choice(ppref, "Ukrainian", "uk");
-	purple_plugin_pref_add_choice(ppref, "Urdu", "ur");
-	purple_plugin_pref_add_choice(ppref, "Vietnamese", "vi");
-	purple_plugin_pref_add_choice(ppref, "Welsh", "cy");
-	purple_plugin_pref_add_choice(ppref, "Yiddish", "yi");
+	for(l = supported_languages; l; l = l->next)
+	{
+		pair = (PurpleKeyValuePair *) l->data;
+		purple_plugin_pref_add_choice(ppref, pair->value, pair->key);
+	}
 	
 	purple_plugin_pref_frame_add(frame, ppref);
 	
@@ -339,6 +366,7 @@ init_plugin(PurplePlugin *plugin)
 	languages = g_get_language_names();
 	const gchar *language;
 	guint i = 0;
+	PurpleKeyValuePair *pair;
 	
 	while((language = languages[i++]))
 		if (language && strlen(language) == 2)
@@ -349,6 +377,72 @@ init_plugin(PurplePlugin *plugin)
 	purple_prefs_add_none("/plugins/core/eionrobb-libpurple-translate");
 	purple_prefs_add_string("/plugins/core/eionrobb-libpurple-translate/locale", language);
 	purple_prefs_add_string("/plugins/core/eionrobb-libpurple-translate/service", "google");
+	
+#define add_language(label, code) \
+	pair = g_new0(PurpleKeyValuePair, 1); \
+	pair->key = g_strdup(code); \
+	pair->value = g_strdup(label); \
+	supported_languages = g_list_append(supported_languages, pair);
+	
+	add_language("Afrikaans", "af");
+	add_language("Albanian", "sq");
+	add_language("Arabic", "ar");
+	add_language("Armenian", "hy");
+	add_language("Azerbaijani", "az");
+	add_language("Basque", "eu");
+	add_language("Belarusian", "be");
+	add_language("Bulgarian", "bg");
+	add_language("Catalan", "ca");
+	add_language("Chinese (Simplified)", "zh-CN");
+	add_language("Chinese (Traditional)", "zh-TW");
+	add_language("Croatian", "hr");
+	add_language("Czech", "cs");
+	add_language("Danish", "da");
+	add_language("Dutch", "nl");
+	add_language("English", "en");
+	add_language("Estonian", "et");
+	add_language("Filipino", "tl");
+	add_language("Finnish", "fi");
+	add_language("French", "fr");
+	add_language("Galician", "gl");
+	add_language("Georgian", "ka");
+	add_language("German", "de");
+	add_language("Greek", "el");
+	add_language("Haitian Creole", "ht");
+	add_language("Hebrew", "iw");
+	add_language("Hindi", "hi");
+	add_language("Hungarian", "hu");
+	add_language("Icelandic", "is");
+	add_language("Indonesian", "id");
+	add_language("Irish", "ga");
+	add_language("Italian", "it");
+	add_language("Japanese", "ja");
+	add_language("Korean", "ko");
+	add_language("Latin", "la");
+	add_language("Latvian", "lv");
+	add_language("Lithuanian", "lt");
+	add_language("Macedonian", "mk");
+	add_language("Malay", "ms");
+	add_language("Maltese", "mt");
+	add_language("Norwegian", "no");
+	add_language("Persian", "fa");
+	add_language("Polish", "pl");
+	add_language("Portuguese", "pt");
+	add_language("Romanian", "ro");
+	add_language("Russian", "ru");
+	add_language("Serbian", "sr");
+	add_language("Slovak", "sk");
+	add_language("Slovenian", "sl");
+	add_language("Spanish", "es");
+	add_language("Swahili", "sw");
+	add_language("Swedish", "sv");
+	add_language("Thai", "th");
+	add_language("Turkish", "tr");
+	add_language("Ukrainian", "uk");
+	add_language("Urdu", "ur");
+	add_language("Vietnamese", "vi");
+	add_language("Welsh", "cy");
+	add_language("Yiddish", "yi");
 }
 
 static gboolean
@@ -360,6 +454,12 @@ plugin_load(PurplePlugin *plugin)
 	purple_signal_connect(purple_conversations_get_handle(),
 						  "sending-im-msg", plugin,
 						  PURPLE_CALLBACK(translate_sending_im_msg), NULL);
+	purple_signal_connect(purple_blist_get_handle(),
+						  "blist-node-extended-menu", plugin,
+						  PURPLE_CALLBACK(translate_blist_extended_menu), NULL);
+	purple_signal_connect(purple_conversations_get_handle(),
+						  "blist-node-extended-menu", plugin,
+						  PURPLE_CALLBACK(translate_conv_extended_menu), NULL);
 	return TRUE;
 }
 
@@ -372,6 +472,12 @@ plugin_unload(PurplePlugin *plugin)
 	purple_signal_disconnect(purple_conversations_get_handle(),
 							 "sending-im-msg", plugin,
 							 PURPLE_CALLBACK(translate_sending_im_msg));
+	purple_signal_disconnect(purple_blist_get_handle(),
+							 "blist-node-extended-menu", plugin,
+							 PURPLE_CALLBACK(translate_blist_extended_menu));
+	purple_signal_disconnect(purple_conversations_get_handle(),
+							 "blist-node-extended-menu", plugin,
+							 PURPLE_CALLBACK(translate_conv_extended_menu));
 	return TRUE;
 }
 
