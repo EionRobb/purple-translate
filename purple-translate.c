@@ -308,7 +308,7 @@ translate_action_blist_cb(PurpleBlistNode *node, PurpleKeyValuePair *pair)
 	
 	if (conv != NULL && pair != NULL)
 	{
-		message = g_strdup_printf("Now translating to %s\n", pair->value);
+		message = g_strdup_printf("Now translating to %s\n", (const gchar *)pair->value);
 		purple_conversation_write(conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
 		g_free(message);
 	}
@@ -371,7 +371,7 @@ translate_action_conv_cb(PurpleConversation *conv, PurpleKeyValuePair *pair)
 		
 		if (pair != NULL)
 		{
-			message = g_strdup_printf("Now translating to %s\n", pair->value);
+			message = g_strdup_printf("Now translating to %s\n", (const gchar *)pair->value);
 			purple_conversation_write(conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
 			g_free(message);
 		}
