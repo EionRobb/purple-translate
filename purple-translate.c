@@ -144,18 +144,18 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
 	
 	buddy = purple_find_buddy(account, *sender);
 	service_to_use = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/service");
+	to_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
 	if (buddy)
 		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)buddy, "eionrobb-translate-lang");
 	if (!stored_lang)
 		stored_lang = "auto";
-	if (!buddy || !service_to_use || g_str_equal(stored_lang, "none"))
+	if (!buddy || !service_to_use || g_str_equal(stored_lang, "none") || g_str_equal(stored_lang, to_lang))
 	{
 		//Allow the message to go through as per normal
 		return FALSE;
 	}
 	
 	stripped = purple_markup_strip_html(*message);
-	to_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
 	
 	convmsg = g_new0(struct TranslateConvMessage, 1);
 	convmsg->account = account;
