@@ -20,7 +20,7 @@
  
 #define PURPLE_PLUGINS
 
-#define VERSION "0.1"
+#define VERSION "1.0"
 
 #include <glib.h>
 #include <string.h>
@@ -563,7 +563,7 @@ static PurplePluginUiInfo prefs_info = {
 static PurplePluginInfo info = {
     PURPLE_PLUGIN_MAGIC,
     2,
-    2,
+    3,
     PURPLE_PLUGIN_STANDARD,
     NULL,
     0,
