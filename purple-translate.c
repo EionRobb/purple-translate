@@ -115,6 +115,10 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 	PurpleBuddy *buddy;
 	gchar *html_text;
 	const gchar *stored_lang = "";
+	GList *l;
+	const gchar *language_name = NULL;
+	PurpleKeyValuePair *pair = NULL;
+	gchar *message;
 	
 	if (detected_language)
 	{
@@ -126,6 +130,25 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 	html_text = purple_strdup_withhtml(translated_phrase);
 	
 	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
+	
+	if (detected_language)
+	{
+		for(l = supported_languages; l; l = l->next)
+		{
+			pair = (PurpleKeyValuePair *) l->data;
+			if (g_str_equal(pair->key, detected_language))
+			{
+				language_name = pair->value;
+				break;
+			}
+		}
+		if (language_name != NULL)
+		{
+			message = g_strdup_printf("Now translating to %s (auto-detected)\n", language_name);
+			purple_conversation_write(convmsg->conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
+			g_free(message);
+		}
+	}
 	
 	g_free(html_text);
 	g_free(convmsg->sender);
@@ -249,10 +272,46 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 static void
 translate_action_blist_cb(PurpleBlistNode *node, PurpleKeyValuePair *pair)
 {
+	PurpleConversation *conv = NULL;
+	gchar *message;
+	PurpleChat *chat;
+	PurpleContact *contact;
+	PurpleBuddy *buddy;
+
 	if (pair == NULL)
 		purple_blist_node_set_string(node, "eionrobb-translate-lang", NULL);
 	else
 		purple_blist_node_set_string(node, "eionrobb-translate-lang", pair->key);
+	
+	switch(node->type)
+	{
+		case PURPLE_BLIST_CHAT_NODE:
+			chat = (PurpleChat *) node;
+			conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+							purple_chat_get_name(chat),
+							chat->account);
+			break;
+		case PURPLE_BLIST_CONTACT_NODE:
+			contact = (PurpleContact *) node;
+			node = (PurpleBlistNode *)purple_contact_get_priority_buddy(contact);
+			//fallthrough intentional
+		case PURPLE_BLIST_BUDDY_NODE:
+			buddy = (PurpleBuddy *) node;
+			conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+							purple_buddy_get_name(buddy),
+							purple_buddy_get_account(buddy));
+			break;
+			
+		default:
+			break;
+	}
+	
+	if (conv != NULL && pair != NULL)
+	{
+		message = g_strdup_printf("Now translating to %s\n", pair->value);
+		purple_conversation_write(conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
+		g_free(message);
+	}
 }
 
 static void
@@ -299,6 +358,7 @@ static void
 translate_action_conv_cb(PurpleConversation *conv, PurpleKeyValuePair *pair)
 {
 	PurpleBlistNode *node = NULL;
+	gchar *message;
 	
 	if (conv->type == PURPLE_CONV_TYPE_IM)
 		node = (PurpleBlistNode *) purple_find_buddy(conv->account, conv->name);
@@ -306,7 +366,16 @@ translate_action_conv_cb(PurpleConversation *conv, PurpleKeyValuePair *pair)
 		node = (PurpleBlistNode *) purple_blist_find_chat(conv->account, conv->name);
 	
 	if (node != NULL)
+	{
 		translate_action_blist_cb(node, pair);
+		
+		if (pair != NULL)
+		{
+			message = g_strdup_printf("Now translating to %s\n", pair->value);
+			purple_conversation_write(conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
+			g_free(message);
+		}
+	}
 }
 
 static void
