@@ -39,6 +39,41 @@ struct _TranslateStore {
 	gpointer userdata;
 };
 
+/** Converts unicode strings such as \003d into =
+  * Code blatantly nicked from the Facebook plugin */
+gchar *
+convert_unicode(const gchar *input)
+{
+	gunichar unicode_char;
+	gchar unicode_char_str[6];
+	gint unicode_char_len;
+	gchar *next_pos;
+	gchar *input_string;
+	gchar *output_string;
+
+	if (input == NULL)
+		return NULL;
+
+	next_pos = input_string = g_strdup(input);
+
+	while ((next_pos = strstr(next_pos, "\\u")))
+	{
+		/* grab the unicode */
+		sscanf(next_pos, "\\u%4x", &unicode_char);
+		/* turn it to a char* */
+		unicode_char_len = g_unichar_to_utf8(unicode_char, unicode_char_str);
+		/* shove it back into the string */
+		g_memmove(next_pos, unicode_char_str, unicode_char_len);
+		/* move all the data after the \u0000 along */
+		g_stpcpy(next_pos + unicode_char_len, next_pos + 6);
+	}
+
+	output_string = g_strcompress(input_string);
+	g_free(input_string);
+
+	return output_string;
+}
+
 void
 google_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
 {
@@ -56,6 +91,10 @@ google_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const 
 	{
 		strstart = strstart + strlen(trans_start);
 		translated = g_strndup(strstart, strchr(strstart, '"') - strstart);
+		
+		strstart = convert_unicode(translated);
+		g_free(translated);
+		translated = strstart;
 	}
 	
 	strstart = g_strstr_len(url_text, len, lang_start);
