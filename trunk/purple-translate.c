@@ -253,6 +253,93 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
 	return TRUE;
 }
 
+
+void
+translate_receiving_chat_msg_cb(const gchar *original_phrase, const gchar *translated_phrase, const gchar *detected_language, gpointer userdata)
+{
+	struct TranslateConvMessage *convmsg = userdata;
+	PurpleChat *chat;
+	gchar *html_text;
+	const gchar *stored_lang = "";
+	const gchar *language_name = NULL;
+	gchar *message;
+	
+	if (detected_language)
+	{
+		chat = purple_blist_find_chat(convmsg->account, convmsg->conv->name);
+		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)chat, "eionrobb-translate-lang");
+		purple_blist_node_set_string((PurpleBlistNode *)chat, "eionrobb-translate-lang", detected_language);
+	}
+	
+	html_text = purple_strdup_withhtml(translated_phrase);
+	
+	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
+	
+	if (detected_language)
+	{
+		language_name = get_language_name(detected_language);
+		
+		if (language_name != NULL)
+		{
+			message = g_strdup_printf("Now translating to %s (auto-detected)", language_name);
+			purple_conversation_write(convmsg->conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
+			g_free(message);
+		}
+	}
+	
+	g_free(html_text);
+	g_free(convmsg->sender);
+	g_free(convmsg);
+}
+
+gboolean
+translate_receiving_chat_msg(PurpleAccount *account, char **sender,
+                             char **message, PurpleConversation *conv,
+                             PurpleMessageFlags *flags)
+{
+	struct TranslateConvMessage *convmsg;
+	const gchar *stored_lang = "auto";
+	gchar *stripped;
+	const gchar *to_lang;
+	PurpleChat *chat;
+	const gchar *service_to_use = "";
+	
+	chat = purple_blist_find_chat(account, conv->name);
+	service_to_use = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/service");
+	to_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
+	if (chat)
+		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)chat, "eionrobb-translate-lang");
+	if (!stored_lang)
+		stored_lang = "auto";
+	if (!chat || !service_to_use || g_str_equal(stored_lang, "none") || g_str_equal(stored_lang, to_lang))
+	{
+		//Allow the message to go through as per normal
+		return FALSE;
+	}
+	
+	stripped = purple_markup_strip_html(*message);
+	
+	convmsg = g_new0(struct TranslateConvMessage, 1);
+	convmsg->account = account;
+	convmsg->sender = *sender;
+	convmsg->conv = conv;
+	convmsg->flags = *flags;
+	
+	if (g_str_equal(service_to_use, "google"))
+	{
+		google_translate(stripped, stored_lang, to_lang, translate_receiving_chat_msg_cb, convmsg);
+	}
+	
+	g_free(stripped);
+	
+	g_free(*message);
+	*message = NULL;
+	*sender = NULL;
+	
+	//Cancel the message
+	return TRUE;
+}
+
 void
 translate_sending_message_cb(const gchar *original_phrase, const gchar *translated_phrase, const gchar *detected_language, gpointer userdata)
 {
@@ -610,6 +697,9 @@ plugin_load(PurplePlugin *plugin)
 	purple_signal_connect(purple_conversations_get_handle(),
 						  "conversation-created", plugin,
 						  PURPLE_CALLBACK(translate_conversation_created), NULL);
+	purple_signal_connect(purple_conversations_get_handle(),
+	                      "receiving-chat-msg", plugin,
+	                      PURPLE_CALLBACK(translate_receiving_chat_msg), NULL);
 	return TRUE;
 }
 
@@ -631,6 +721,9 @@ plugin_unload(PurplePlugin *plugin)
 	purple_signal_disconnect(purple_conversations_get_handle(),
 							 "conversation-created", plugin,
 							 PURPLE_CALLBACK(translate_conversation_created));
+	purple_signal_disconnect(purple_conversations_get_handle(),
+	                         "receiving-chat-msg", plugin,
+	                         PURPLE_CALLBACK(translate_receiving_chat_msg));
 	return TRUE;
 }
 
