@@ -74,6 +74,26 @@ convert_unicode(const gchar *input)
 	return output_string;
 }
 
+const gchar *
+get_language_name(const gchar *language_key)
+{
+	GList *l;
+	const gchar *language_name = NULL;
+	PurpleKeyValuePair *pair = NULL;
+	
+	for(l = supported_languages; l; l = l->next)
+	{
+		pair = (PurpleKeyValuePair *) l->data;
+		if (g_str_equal(pair->key, language_key))
+		{
+			language_name = pair->value;
+			break;
+		}
+	}
+	
+	return language_name;
+}
+
 void
 google_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
 {
@@ -154,9 +174,7 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 	PurpleBuddy *buddy;
 	gchar *html_text;
 	const gchar *stored_lang = "";
-	GList *l;
 	const gchar *language_name = NULL;
-	PurpleKeyValuePair *pair = NULL;
 	gchar *message;
 	
 	if (detected_language)
@@ -172,15 +190,8 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 	
 	if (detected_language)
 	{
-		for(l = supported_languages; l; l = l->next)
-		{
-			pair = (PurpleKeyValuePair *) l->data;
-			if (g_str_equal(pair->key, detected_language))
-			{
-				language_name = pair->value;
-				break;
-			}
-		}
+		language_name = get_language_name(detected_language);
+		
 		if (language_name != NULL)
 		{
 			message = g_strdup_printf("Now translating to %s (auto-detected)", language_name);
@@ -418,6 +429,34 @@ translate_action_conv_cb(PurpleConversation *conv, PurpleKeyValuePair *pair)
 }
 
 static void
+translate_conversation_created(PurpleConversation *conv)
+{
+	PurpleBlistNode *node = NULL;
+	gchar *message;
+	const gchar *language_key;
+	const gchar *language_name;
+	
+	if (conv->type == PURPLE_CONV_TYPE_IM)
+		node = (PurpleBlistNode *) purple_find_buddy(conv->account, conv->name);
+	else if (conv->type == PURPLE_CONV_TYPE_CHAT)
+		node = (PurpleBlistNode *) purple_blist_find_chat(conv->account, conv->name);
+	
+	if (node != NULL)
+	{
+		language_key = purple_blist_node_get_string(node, "eionrobb-translate-lang");
+		
+		if (language_key != NULL)
+		{
+			language_name = get_language_name(language_key);
+		
+			message = g_strdup_printf("Now translating to %s", language_name);
+			purple_conversation_write(conv, NULL, message, PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG, time(NULL));
+			g_free(message);
+		}
+	}
+}
+
+static void
 translate_conv_extended_menu(PurpleConversation *conv, GList **menu)
 {
 	PurpleBlistNode *node = NULL;
@@ -568,6 +607,9 @@ plugin_load(PurplePlugin *plugin)
 	purple_signal_connect(purple_conversations_get_handle(),
 						  "blist-node-extended-menu", plugin,
 						  PURPLE_CALLBACK(translate_conv_extended_menu), NULL);
+	purple_signal_connect(purple_conversations_get_handle(),
+						  "conversation-created", plugin,
+						  PURPLE_CALLBACK(translate_conversation_created), NULL);
 	return TRUE;
 }
 
@@ -586,6 +628,9 @@ plugin_unload(PurplePlugin *plugin)
 	purple_signal_disconnect(purple_conversations_get_handle(),
 							 "blist-node-extended-menu", plugin,
 							 PURPLE_CALLBACK(translate_conv_extended_menu));
+	purple_signal_disconnect(purple_conversations_get_handle(),
+							 "conversation-created", plugin,
+							 PURPLE_CALLBACK(translate_conversation_created));
 	return TRUE;
 }
 
