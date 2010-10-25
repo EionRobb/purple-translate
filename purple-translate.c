@@ -406,6 +406,75 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 	*message = NULL;
 }
 
+void
+translate_sending_chat_message_cb(const gchar *original_phrase, const gchar *translated_phrase, const gchar *detected_language, gpointer userdata)
+{
+	struct TranslateConvMessage *convmsg = userdata;
+	gchar *html_text;
+	int err = 0;
+	
+	html_text = purple_strdup_withhtml(translated_phrase);
+	err = serv_chat_send(purple_account_get_connection(convmsg->account), purple_conv_chat_get_id(PURPLE_CONV_CHAT(convmsg->conv)), html_text, convmsg->flags);
+	g_free(html_text);
+	
+	html_text = purple_strdup_withhtml(original_phrase);
+	//if (err > 0)
+	//{
+	//	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
+	//}
+	
+	purple_signal_emit(purple_conversations_get_handle(), "sent-chat-msg",
+						convmsg->account, html_text,
+						purple_conv_chat_get_id(PURPLE_CONV_CHAT(convmsg->conv)));
+	
+	g_free(html_text);
+	g_free(convmsg->sender);
+	g_free(convmsg);
+}
+
+void
+translate_sending_chat_msg(PurpleAccount *account, char **message, int chat_id)
+{
+	const gchar *from_lang = "";
+	const gchar *service_to_use = "";
+	const gchar *to_lang = "";
+	PurpleChat *chat = NULL;
+	PurpleConversation *conv;
+	struct TranslateConvMessage *convmsg;
+	gchar *stripped;
+
+	from_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
+	service_to_use = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/service");
+	conv = purple_find_chat(purple_account_get_connection(account), chat_id);
+	if (conv)
+		chat = purple_blist_find_chat(account, conv->name);
+	if (chat)
+		to_lang = purple_blist_node_get_string((PurpleBlistNode *)chat, "eionrobb-translate-lang");
+	
+	if (!chat || !service_to_use || !to_lang || g_str_equal(from_lang, to_lang) || g_str_equal(to_lang, "auto"))
+	{
+		// Don't translate this message
+		return;
+	}
+	
+	stripped = purple_markup_strip_html(*message);
+	
+	convmsg = g_new0(struct TranslateConvMessage, 1);
+	convmsg->account = account;
+	convmsg->conv = conv;
+	convmsg->flags = PURPLE_MESSAGE_SEND;
+	
+	if (g_str_equal(service_to_use, "google"))
+	{
+		google_translate(stripped, from_lang, to_lang, translate_sending_chat_message_cb, convmsg);
+	}
+	
+	g_free(stripped);
+	
+	g_free(*message);
+	*message = NULL;
+}
+
 static void
 translate_action_blist_cb(PurpleBlistNode *node, PurpleKeyValuePair *pair)
 {
@@ -700,6 +769,9 @@ plugin_load(PurplePlugin *plugin)
 	purple_signal_connect(purple_conversations_get_handle(),
 	                      "receiving-chat-msg", plugin,
 	                      PURPLE_CALLBACK(translate_receiving_chat_msg), NULL);
+	purple_signal_connect(purple_conversations_get_handle(),
+	                      "sending-chat-msg", plugin,
+	                      PURPLE_CALLBACK(translate_sending_chat_msg), NULL);
 	return TRUE;
 }
 
@@ -724,6 +796,9 @@ plugin_unload(PurplePlugin *plugin)
 	purple_signal_disconnect(purple_conversations_get_handle(),
 	                         "receiving-chat-msg", plugin,
 	                         PURPLE_CALLBACK(translate_receiving_chat_msg));
+	purple_signal_disconnect(purple_conversations_get_handle(),
+	                         "sending-chat-msg", plugin,
+	                         PURPLE_CALLBACK(translate_sending_chat_msg));
 	return TRUE;
 }
 
