@@ -183,6 +183,41 @@ bing_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gc
 	g_free(store);
 }
 
+
+void
+bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *to_lang, TranslateCallback callback, gpointer userdata);
+
+void
+bing_translate_autodetect_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
+{
+	struct _TranslateStore *store = user_data;
+	gchar *lang = NULL;
+	const gchar *to_lang;
+	
+	purple_debug_info("translate", "Got response: %s\n", url_text);
+	
+	if (g_str_equal(url_text, "\"\"") || !url_text || !len)
+	{
+		// Unknown language
+		store->callback(store->original_phrase, store->original_phrase, NULL, store->userdata);
+	} else {
+	
+		if (url_text[0] == '"')
+			lang = g_strndup(&url_text[1], len - 2);
+		else
+			lang = g_strndup(url_text, len);
+		
+		to_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
+		bing_translate(store->original_phrase, lang, to_lang, store->callback, store->userdata);
+		
+		g_free(lang);
+	}
+	
+	g_free(store->detected_language);
+	g_free(store->original_phrase);
+	g_free(store);
+}
+
 void
 bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *to_lang, TranslateCallback callback, gpointer userdata)
 {
@@ -192,24 +227,19 @@ bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *t
 	
 	encoded_phrase = g_strdup(purple_url_encode(plain_phrase));
 	
-	if (!from_lang || !(*from_lang) || g_str_equal(from_lang, "auto"))
-	{
-		//TODO Detect language
-		//http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=BING_APPID&text=
-		g_free(encoded_phrase);
-		
-		//Until we finish the TODO, just callback straight away
-		callback(plain_phrase, plain_phrase, NULL, userdata);
-		return;
-	}
-	
-	url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
-					encoded_phrase, from_lang, to_lang);
-	
 	store = g_new0(struct _TranslateStore, 1);
 	store->original_phrase = g_strdup(plain_phrase);
 	store->callback = callback;
 	store->userdata = userdata;
+	
+	if (!from_lang || !(*from_lang) || g_str_equal(from_lang, "auto"))
+	{
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=" BING_APPID "&text=%s",
+						encoded_phrase);
+	} else {
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
+						encoded_phrase, from_lang, to_lang);
+	}
 	
 	purple_debug_info("translate", "Fetching %s\n", url);
 	
