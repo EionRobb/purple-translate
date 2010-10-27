@@ -183,16 +183,14 @@ bing_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gc
 	g_free(store);
 }
 
-
-void
-bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *to_lang, TranslateCallback callback, gpointer userdata);
-
 void
 bing_translate_autodetect_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
 {
 	struct _TranslateStore *store = user_data;
-	gchar *lang = NULL;
-	const gchar *to_lang;
+	gchar *from_lang = NULL;
+	gchar *to_lang;
+	gchar *encoded_phrase;
+	gchar *url;
 	
 	purple_debug_info("translate", "Got response: %s\n", url_text);
 	
@@ -200,22 +198,32 @@ bing_translate_autodetect_cb(PurpleUtilFetchUrlData *url_data, gpointer user_dat
 	{
 		// Unknown language
 		store->callback(store->original_phrase, store->original_phrase, NULL, store->userdata);
+		g_free(store->detected_language);
+		g_free(store->original_phrase);
+		g_free(store);
+		
 	} else {
 	
 		if (url_text[0] == '"')
-			lang = g_strndup(&url_text[1], len - 2);
+			from_lang = g_strndup(&url_text[1], len - 2);
 		else
-			lang = g_strndup(url_text, len);
+			from_lang = g_strndup(url_text, len);
 		
-		to_lang = purple_prefs_get_string("/plugins/core/eionrobb-libpurple-translate/locale");
-		bing_translate(store->original_phrase, lang, to_lang, store->callback, store->userdata);
+		to_lang = store->detected_language;
+		store->detected_language = from_lang;
 		
-		g_free(lang);
+		// Same as bing_translate() but we've already made the _TranslateStore
+		encoded_phrase = g_strdup(purple_url_encode(store->original_phrase));
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
+						encoded_phrase, from_lang, to_lang);
+		purple_debug_info("translate", "Fetching %s\n", url);
+		
+		purple_util_fetch_url_request(url, TRUE, "libpurple", FALSE, NULL, FALSE, bing_translate_cb, store);
+		
+		g_free(to_lang);
+		g_free(encoded_phrase);
+		g_free(url);
 	}
-	
-	g_free(store->detected_language);
-	g_free(store->original_phrase);
-	g_free(store);
 }
 
 void
@@ -224,6 +232,7 @@ bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *t
 	gchar *encoded_phrase;
 	gchar *url;
 	struct _TranslateStore *store;
+	PurpleUtilFetchUrlCallback urlcallback;
 	
 	encoded_phrase = g_strdup(purple_url_encode(plain_phrase));
 	
@@ -236,14 +245,17 @@ bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *t
 	{
 		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=" BING_APPID "&text=%s",
 						encoded_phrase);
+		store->detected_language = g_strdup(to_lang);
+		urlcallback = bing_translate_autodetect_cb;
 	} else {
 		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
 						encoded_phrase, from_lang, to_lang);
+		urlcallback = bing_translate_cb;
 	}
 	
 	purple_debug_info("translate", "Fetching %s\n", url);
 	
-	purple_util_fetch_url_request(url, TRUE, "libpurple", FALSE, NULL, FALSE, bing_translate_cb, store);
+	purple_util_fetch_url_request(url, TRUE, "libpurple", FALSE, NULL, FALSE, urlcallback, store);
 	
 	g_free(encoded_phrase);
 	g_free(url);
