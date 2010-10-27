@@ -21,6 +21,7 @@
 #define PURPLE_PLUGINS
 
 #define VERSION "1.0"
+#define BING_APPID "0FFF5300CD157A2E748DFCCF6D67F8028E5B578D"
 
 #include <glib.h>
 #include <string.h>
@@ -37,6 +38,7 @@ struct _TranslateStore {
 	gchar *original_phrase;
 	TranslateCallback callback;
 	gpointer userdata;
+	gchar *detected_language; //optional - needed for Bing
 };
 
 /** Converts unicode strings such as \003d into =
@@ -160,6 +162,63 @@ google_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar 
 	g_free(url);
 }
 
+void
+bing_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
+{
+	struct _TranslateStore *store = user_data;
+	gchar *translated = NULL;
+
+	purple_debug_info("translate", "Got response: %s\n", url_text);
+	
+	if (url_text[0] == '"')
+		translated = g_strndup(&url_text[1], len - 2);
+	else
+		translated = g_strndup(url_text, len);
+	
+	store->callback(store->original_phrase, translated, store->detected_language, store->userdata);
+	
+	g_free(translated);
+	g_free(store->detected_language);
+	g_free(store->original_phrase);
+	g_free(store);
+}
+
+void
+bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *to_lang, TranslateCallback callback, gpointer userdata)
+{
+	gchar *encoded_phrase;
+	gchar *url;
+	struct _TranslateStore *store;
+	
+	encoded_phrase = g_strdup(purple_url_encode(plain_phrase));
+	
+	if (!from_lang || !(*from_lang) || g_str_equal(from_lang, "auto"))
+	{
+		//TODO Detect language
+		//http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=BING_APPID&text=
+		g_free(encoded_phrase);
+		
+		//Until we finish the TODO, just callback straight away
+		callback(plain_phrase, plain_phrase, NULL, userdata);
+		return;
+	}
+	
+	url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
+					encoded_phrase, from_lang, to_lang);
+	
+	store = g_new0(struct _TranslateStore, 1);
+	store->original_phrase = g_strdup(plain_phrase);
+	store->callback = callback;
+	store->userdata = userdata;
+	
+	purple_debug_info("translate", "Fetching %s\n", url);
+	
+	purple_util_fetch_url_request(url, TRUE, "libpurple", FALSE, NULL, FALSE, bing_translate_cb, store);
+	
+	g_free(encoded_phrase);
+	g_free(url);
+}
+
 struct TranslateConvMessage {
 	PurpleAccount *account;
 	gchar *sender;
@@ -241,6 +300,9 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
 	if (g_str_equal(service_to_use, "google"))
 	{
 		google_translate(stripped, stored_lang, to_lang, translate_receiving_message_cb, convmsg);
+	} else if (g_str_equal(service_to_use, "bing"))
+	{
+		bing_translate(stripped, stored_lang, to_lang, translate_receiving_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -328,6 +390,9 @@ translate_receiving_chat_msg(PurpleAccount *account, char **sender,
 	if (g_str_equal(service_to_use, "google"))
 	{
 		google_translate(stripped, stored_lang, to_lang, translate_receiving_chat_msg_cb, convmsg);
+	} else if (g_str_equal(service_to_use, "bing"))
+	{
+		bing_translate(stripped, stored_lang, to_lang, translate_receiving_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -398,6 +463,9 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 	if (g_str_equal(service_to_use, "google"))
 	{
 		google_translate(stripped, from_lang, to_lang, translate_sending_message_cb, convmsg);
+	} else if (g_str_equal(service_to_use, "bing"))
+	{
+		bing_translate(stripped, from_lang, to_lang, translate_receiving_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -467,6 +535,9 @@ translate_sending_chat_msg(PurpleAccount *account, char **message, int chat_id)
 	if (g_str_equal(service_to_use, "google"))
 	{
 		google_translate(stripped, from_lang, to_lang, translate_sending_chat_message_cb, convmsg);
+	} else if (g_str_equal(service_to_use, "bing"))
+	{
+		bing_translate(stripped, from_lang, to_lang, translate_receiving_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -656,6 +727,7 @@ plugin_config_frame(PurplePlugin *plugin)
 	purple_plugin_pref_set_type(ppref, PURPLE_PLUGIN_PREF_CHOICE);
 	
 	purple_plugin_pref_add_choice(ppref, "Google Translate", "google");
+	purple_plugin_pref_add_choice(ppref, "Microsoft Translator", "bing");
 	
 	purple_plugin_pref_frame_add(frame, ppref);
 	
