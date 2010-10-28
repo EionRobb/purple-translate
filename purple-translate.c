@@ -283,14 +283,7 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 		buddy = purple_find_buddy(convmsg->account, convmsg->sender);
 		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)buddy, "eionrobb-translate-lang");
 		purple_blist_node_set_string((PurpleBlistNode *)buddy, "eionrobb-translate-lang", detected_language);
-	}
-	
-	html_text = purple_strdup_withhtml(translated_phrase);
-	
-	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
-	
-	if (detected_language)
-	{
+		
 		language_name = get_language_name(detected_language);
 		
 		if (language_name != NULL)
@@ -300,6 +293,10 @@ translate_receiving_message_cb(const gchar *original_phrase, const gchar *transl
 			g_free(message);
 		}
 	}
+	
+	html_text = purple_strdup_withhtml(translated_phrase);
+	
+	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
 	
 	g_free(html_text);
 	g_free(convmsg->sender);
@@ -373,14 +370,7 @@ translate_receiving_chat_msg_cb(const gchar *original_phrase, const gchar *trans
 		chat = purple_blist_find_chat(convmsg->account, convmsg->conv->name);
 		stored_lang = purple_blist_node_get_string((PurpleBlistNode *)chat, "eionrobb-translate-lang");
 		purple_blist_node_set_string((PurpleBlistNode *)chat, "eionrobb-translate-lang", detected_language);
-	}
-	
-	html_text = purple_strdup_withhtml(translated_phrase);
-	
-	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
-	
-	if (detected_language)
-	{
+		
 		language_name = get_language_name(detected_language);
 		
 		if (language_name != NULL)
@@ -390,6 +380,10 @@ translate_receiving_chat_msg_cb(const gchar *original_phrase, const gchar *trans
 			g_free(message);
 		}
 	}
+	
+	html_text = purple_strdup_withhtml(translated_phrase);
+	
+	purple_conversation_write(convmsg->conv, convmsg->sender, html_text, convmsg->flags, time(NULL));
 	
 	g_free(html_text);
 	g_free(convmsg->sender);
