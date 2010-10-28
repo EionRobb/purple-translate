@@ -328,6 +328,9 @@ translate_receiving_im_msg(PurpleAccount *account, char **sender,
 		return FALSE;
 	}
 	
+	if (conv == NULL)
+		conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, *sender);
+	
 	stripped = purple_markup_strip_html(*message);
 	
 	convmsg = g_new0(struct TranslateConvMessage, 1);
@@ -436,6 +439,14 @@ translate_receiving_chat_msg(PurpleAccount *account, char **sender,
 	g_free(*message);
 	*message = NULL;
 	*sender = NULL;
+	
+	if (conv == NULL)
+	{
+		// Fake receiving a message to open the conversation window
+		*message = g_strdup(" ");
+		*flags |= PURPLE_MESSAGE_INVISIBLE | PURPLE_MESSAGE_NO_LOG;
+		return FALSE;
+	}
 	
 	//Cancel the message
 	return TRUE;
