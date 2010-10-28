@@ -167,13 +167,15 @@ bing_translate_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gc
 {
 	struct _TranslateStore *store = user_data;
 	gchar *translated = NULL;
+	gchar *temp;
 
 	purple_debug_info("translate", "Got response: %s\n", url_text);
 	
-	if (url_text[0] == '"')
-		translated = g_strndup(&url_text[1], len - 2);
-	else
-		translated = g_strndup(url_text, len);
+	temp = strchr(url_text, '"') + 1; 
+	temp = g_strndup(temp, len - (temp - url_text) - 1);
+	
+	translated = convert_unicode(temp);
+	g_free(temp);
 	
 	store->callback(store->original_phrase, translated, store->detected_language, store->userdata);
 	
@@ -194,7 +196,7 @@ bing_translate_autodetect_cb(PurpleUtilFetchUrlData *url_data, gpointer user_dat
 	
 	purple_debug_info("translate", "Got response: %s\n", url_text);
 	
-	if (g_str_equal(url_text, "\"\"") || !url_text || !len)
+	if (!url_text || !len || g_strstr_len(url_text, len, "\"\""))
 	{
 		// Unknown language
 		store->callback(store->original_phrase, store->original_phrase, NULL, store->userdata);
@@ -204,17 +206,15 @@ bing_translate_autodetect_cb(PurpleUtilFetchUrlData *url_data, gpointer user_dat
 		
 	} else {
 	
-		if (url_text[0] == '"')
-			from_lang = g_strndup(&url_text[1], len - 2);
-		else
-			from_lang = g_strndup(url_text, len);
+		from_lang = strchr(url_text, '"') + 1; 
+		from_lang = g_strndup(from_lang, len - (from_lang - url_text) - 1);
 		
 		to_lang = store->detected_language;
 		store->detected_language = from_lang;
 		
 		// Same as bing_translate() but we've already made the _TranslateStore
-		encoded_phrase = g_strdup(purple_url_encode(store->original_phrase));
-		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
+		encoded_phrase = g_strescape(purple_url_encode(store->original_phrase), NULL);
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%%22%s%%22&from=%s&to=%s",
 						encoded_phrase, from_lang, to_lang);
 		purple_debug_info("translate", "Fetching %s\n", url);
 		
@@ -234,7 +234,7 @@ bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *t
 	struct _TranslateStore *store;
 	PurpleUtilFetchUrlCallback urlcallback;
 	
-	encoded_phrase = g_strdup(purple_url_encode(plain_phrase));
+	encoded_phrase = g_strescape(purple_url_encode(plain_phrase), NULL);
 	
 	store = g_new0(struct _TranslateStore, 1);
 	store->original_phrase = g_strdup(plain_phrase);
@@ -243,12 +243,12 @@ bing_translate(const gchar *plain_phrase, const gchar *from_lang, const gchar *t
 	
 	if (!from_lang || !(*from_lang) || g_str_equal(from_lang, "auto"))
 	{
-		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=" BING_APPID "&text=%s",
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Detect?appId=" BING_APPID "&text=%%22%s%%22",
 						encoded_phrase);
 		store->detected_language = g_strdup(to_lang);
 		urlcallback = bing_translate_autodetect_cb;
 	} else {
-		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%s&from=%s&to=%s",
+		url = g_strdup_printf("http://api.microsofttranslator.com/V2/Ajax.svc/Translate?appId=" BING_APPID "&text=%%22%s%%22&from=%s&to=%s",
 						encoded_phrase, from_lang, to_lang);
 		urlcallback = bing_translate_cb;
 	}
@@ -434,7 +434,7 @@ translate_receiving_chat_msg(PurpleAccount *account, char **sender,
 		google_translate(stripped, stored_lang, to_lang, translate_receiving_chat_msg_cb, convmsg);
 	} else if (g_str_equal(service_to_use, "bing"))
 	{
-		bing_translate(stripped, stored_lang, to_lang, translate_receiving_message_cb, convmsg);
+		bing_translate(stripped, stored_lang, to_lang, translate_receiving_chat_msg_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -507,7 +507,7 @@ translate_sending_im_msg(PurpleAccount *account, const char *receiver, char **me
 		google_translate(stripped, from_lang, to_lang, translate_sending_message_cb, convmsg);
 	} else if (g_str_equal(service_to_use, "bing"))
 	{
-		bing_translate(stripped, from_lang, to_lang, translate_receiving_message_cb, convmsg);
+		bing_translate(stripped, from_lang, to_lang, translate_sending_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
@@ -579,7 +579,7 @@ translate_sending_chat_msg(PurpleAccount *account, char **message, int chat_id)
 		google_translate(stripped, from_lang, to_lang, translate_sending_chat_message_cb, convmsg);
 	} else if (g_str_equal(service_to_use, "bing"))
 	{
-		bing_translate(stripped, from_lang, to_lang, translate_receiving_message_cb, convmsg);
+		bing_translate(stripped, from_lang, to_lang, translate_sending_chat_message_cb, convmsg);
 	}
 	
 	g_free(stripped);
