@@ -20,7 +20,7 @@
  
 #define PURPLE_PLUGINS
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define BING_APPID "0FFF5300CD157A2E748DFCCF6D67F8028E5B578D"
 
 #include <glib.h>
